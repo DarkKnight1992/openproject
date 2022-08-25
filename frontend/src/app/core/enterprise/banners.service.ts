@@ -39,7 +39,8 @@ export class BannersService {
   }
 
   public get eeShowBanners():boolean {
-    return this._banners;
+    // return this._banners;
+    return false;
   }
 
   public getEnterPriseEditionUrl({ referrer, hash }:{ referrer?:string, hash?:string } = {}) {

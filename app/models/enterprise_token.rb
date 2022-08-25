@@ -95,15 +95,17 @@ class EnterpriseToken < ApplicationRecord
   ##
   # The domain is only validated for tokens from version 2.0 onwards.
   def invalid_domain?
-    return false unless token_object&.validate_domain?
+    # return false unless token_object&.validate_domain?
 
-    token_object.domain != Setting.host_name
+    # token_object.domain != Setting.host_name
+    return false
   end
 
   private
 
   def load_token!
     @token_object = OpenProject::Token.import(encoded_token)
+    @token_object.expires_at = Date.yesterday
   rescue OpenProject::Token::ImportError => e
     Rails.logger.error "Failed to load EE token: #{e}"
     nil

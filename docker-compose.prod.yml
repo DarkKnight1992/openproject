@@ -1,0 +1,83 @@
+version: "3.7"
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  pgdata:
+  opdata:
+
+x-op-restart-policy: &restart_policy
+  restart: unless-stopped
+x-op-build: &build
+  context: .
+  dockerfile: ./docker/prod/Dockerfile
+  args:
+    DEV_UID: 1000
+    DEV_GID: 1001
+x-op-app: &app
+  build:
+    <<: *build
+  <<: *restart_policy
+  environment:
+    RAILS_CACHE_STORE: "memcache"
+    OPENPROJECT_CACHE__MEMCACHE__SERVER: "cache:11211"
+    OPENPROJECT_RAILS__RELATIVE__URL__ROOT: "${OPENPROJECT_RAILS__RELATIVE__URL__ROOT:-}"
+    DATABASE_URL: postgresql://${DB_USERNAME:-postgres}:${DB_PASSWORD:-p4ssw0rd}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_DATABASE:-openproject}?pool=20&encoding=unicode&reconnect=true
+    RAILS_MIN_THREADS: 4
+    RAILS_MAX_THREADS: 16
+    # set to true to enable the email receiving feature. See ./docker/cron for more options
+    IMAP_ENABLED: "${IMAP_ENABLED:-false}"
+  volumes:
+    - "${OPDATA:-opdata}:/var/openproject/assets"
+
+services:
+  web:
+    <<: *app
+    command: "./docker/prod/web"
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - db
+      - cache
+      - seeder
+    labels:
+      - autoheal=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080${OPENPROJECT_RAILS__RELATIVE__URL__ROOT:-}/health_checks/default"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
+  db:
+    image: postgres:13
+    <<: *restart_policy
+    stop_grace_period: "3s"
+    volumes:
+      - "${PGDATA:-pgdata}:/var/lib/postgresql/data"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-p4ssw0rd}
+      POSTGRES_DB: openproject
+    networks:
+      - backend
+
+  cache:
+    image: memcached
+    <<: *restart_policy
+    networks:
+      - backend
+  
+  seeder:
+    <<: *app
+    command: "./docker/prod/seeder"
+    restart: on-failure
+    networks:
+      - backend
+
+  adminer:
+    image: adminer
+    ports:
+      - 8480:8080
